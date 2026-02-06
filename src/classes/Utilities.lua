@@ -30,15 +30,43 @@ end
 ---@param identifier string
 ---@return string
 function Utilities.ensureBackticks(identifier)
-    if identifier:match('^`.*`$') then
-        return identifier
+    if Utilities.isEmpty(identifier) then
+        error(('[%s]: Empty identifier provided.'):format(Utilities.CURRENT_RESOURCE_NAME))
     end
 
+    -- Allow "*" and "table.*" patterns.
     if identifier == '*' then
-        return identifier
+        return '*'
     end
 
-    return '`' .. identifier .. '`'
+    local parts = {}
+
+    for part in tostring(identifier):gmatch('[^%.]+') do
+        if part == '*' then
+            parts[#parts + 1] = '*'
+        else
+            -- Strip surrounding backticks if developer provided them.
+            local inner = part:match('^`(.+)`$') or part
+
+            -- STRICT identifier validation:
+            -- - blocks spaces, punctuation, SQL comment tokens, etc.
+            -- - forces predictable quoting output
+            if not inner:match('^[A-Za-z_][A-Za-z0-9_]*$') then
+                error(('[%s]: Unsafe identifier: %s'):format(Utilities.CURRENT_RESOURCE_NAME, tostring(identifier)))
+            end
+
+            parts[#parts + 1] = '`' .. inner .. '`'
+        end
+    end
+
+    -- Disallow "*" in the middle (e.g. "*.id")
+    for i = 1, (#parts - 1) do
+        if parts[i] == '*' then
+            error(('[%s]: Invalid identifier: %s'):format(Utilities.CURRENT_RESOURCE_NAME, tostring(identifier)))
+        end
+    end
+
+    return table.concat(parts, '.')
 end
 
 function Utilities.getSorted(tbl)

@@ -6,9 +6,10 @@ DB = lib.class('DB')
 
 ---Create a new QueryBuilder instance
 ---@param name string
+---@param alias? string
 ---@return QueryBuilder
-function DB:table(name)
-    return QueryBuilder:constructor(name)
+function DB:table(name, alias)
+    return QueryBuilder:constructor(name, alias)
 end
 
 return DB

@@ -5,16 +5,11 @@ local Input = lib.class('Input')
 ---@param value string The value to sanitize
 ---@return string sanitized The sanitized value
 function Input:sanitize(value)
-    if type(value) ~= 'string' then
-        return value
-    end
-
-    value = value:gsub('[%c]', '')
-
-    value = value:gsub('\'', '\'\'')
-    value = value:gsub('\\', '\\\\')
-
-    return value
+    -- This QueryBuilder uses prepared statements ("?" placeholders) with oxmysql.
+    -- Values MUST NOT be SQL-escaped here (doing so causes double-escaping and data corruption).
+    -- We only strip NUL bytes, which can cause issues in some drivers.
+    if type(value) ~= 'string' then return value end
+    return value:gsub('%z', '')
 end
 
 ---Sanitize a table of values recursively

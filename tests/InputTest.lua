@@ -37,9 +37,9 @@ local tests = {
         local sanitized = Input:sanitize(input)
 
         return assertEquals(
-            "Tomić''); DROP TABLE users; --",
+            input,
             sanitized,
-            'SQL injection attempt should be escaped'
+            'Sanitize should not SQL-escape (prepared statements handle injection)'
         )
     end,
 
@@ -52,9 +52,9 @@ local tests = {
         local sanitized = Input:sanitizeTable(input)
 
         return assertEquals(
-            "Tomić''); DROP TABLE users; --",
+            input.name,
             sanitized.name,
-            'SQL injection in table should be escaped'
+            'SanitizeTable should not SQL-escape (prepared statements handle injection)'
         )
     end,
 
@@ -71,9 +71,9 @@ local tests = {
         local sanitized = Input:sanitizeTable(input)
 
         return assertEquals(
-            "dark''); --",
+            input.user.settings.theme,
             sanitized.user.settings.theme,
-            'Nested SQL injection should be escaped'
+            'Nested sanitize should not SQL-escape (prepared statements handle injection)'
         )
     end
 }

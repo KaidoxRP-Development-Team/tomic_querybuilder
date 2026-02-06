@@ -90,3 +90,46 @@ local affectedRows = DB:table("users")
     :where("identifier", "char1:12345")
     :delete()
 ```
+
+### OR Where / WHERE IN / Grouped Wheres
+
+```lua
+local users = DB:table("users")
+    :select("identifier", "username")
+    :where("status", "active")
+    :orWhere("status", "pending")
+    :whereIn("group", { "admin", "moderator" })
+    :whereGroup(function(q)
+        q:where("age", ">=", 18)
+         :orWhereNull("age")
+    end)
+    :get()
+```
+
+### First Row / Scalar Value
+
+```lua
+local user = DB:table("users")
+    :where("identifier", "char1:12345")
+    :first()
+
+local bankBalance = DB:table("users")
+    :where("identifier", "char1:12345")
+    :value("bank")
+```
+
+### Table Alias
+
+```lua
+-- FROM `users` AS `u`
+local users = DB:table("users", "u")
+    :select("u.identifier", "u.username")
+    :where("u.status", "active")
+    :get()
+```
+
+## Security / Safety Notes
+
+- This resource uses prepared statements with oxmysql. Values are passed as bindings ("?") and are **not** SQL-escaped by the Input helper.
+- Identifiers (table/column names) are strictly validated before being backticked. If you need complex SQL expressions, use `selectRaw(...)` / `whereRaw(...)`.
+- UPDATE/DELETE without a WHERE clause throws by default; call `:allowAll()` to override.

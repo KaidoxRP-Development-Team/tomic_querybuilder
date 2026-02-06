@@ -178,14 +178,16 @@ local tests = {
     -- Test SQL injection prevention in column names
     function()
         local maliciousColumn = "id FROM users; DROP TABLE users; SELECT * FROM users WHERE id"
-        local query = DB:table('users')
-            :where(maliciousColumn, 1)
-            :buildQuery()
+        local ok, err = pcall(function()
+            DB:table('users')
+                :where(maliciousColumn, 1)
+                :buildQuery()
+        end)
 
         return assertEquals(
-            'SELECT * FROM `users` WHERE `' .. maliciousColumn .. '` = ?',
-            query,
-            'Column names should not be parameterized (handled by developer)'
+            false,
+            ok,
+            'Unsafe identifiers should throw an error (use whereRaw/selectRaw for complex SQL)'
         )
     end,
 
