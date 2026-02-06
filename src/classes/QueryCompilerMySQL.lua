@@ -38,6 +38,54 @@ function QueryCompilerMySQL:compileSelectList(selects)
     return table.concat(compiled, ', ')
 end
 
+---@param joins table
+---@param params table
+---@return string
+function QueryCompilerMySQL:compileJoinClauses(joins, params)
+    if #joins == 0 then
+        return ''
+    end
+
+    local compiledJoins = {}
+
+    for _, join in ipairs(joins) do
+        local tableSql = Utilities.ensureBackticks(join.tableName)
+        if join.alias then
+            tableSql = tableSql .. ' AS ' .. Utilities.ensureBackticks(join.alias)
+        end
+
+        if not join.ons or #join.ons == 0 then
+            error(('[%s]: JOIN requires at least one ON clause.'):format(Utilities.CURRENT_RESOURCE_NAME))
+        end
+
+        local onParts = {}
+        for i, on in ipairs(join.ons) do
+            if i > 1 then
+                onParts[#onParts + 1] = on.boolean or 'AND'
+            end
+
+            if on._raw then
+                onParts[#onParts + 1] = on._raw
+                if on.params then
+                    for _, v in ipairs(on.params) do
+                        params[#params + 1] = v
+                    end
+                end
+            else
+                onParts[#onParts + 1] = ('%s %s %s'):format(
+                    Utilities.ensureBackticks(on.left),
+                    on.operator,
+                    Utilities.ensureBackticks(on.right)
+                )
+            end
+        end
+
+        compiledJoins[#compiledJoins + 1] = ('%s JOIN %s ON %s'):format(join._type, tableSql, table.concat(onParts, ' '))
+    end
+
+    return table.concat(compiledJoins, ' ')
+end
+
 ---@param wheres table
 ---@param params table
 ---@return string
@@ -105,6 +153,10 @@ function QueryCompilerMySQL:compileSelect(state)
     }
     local params = {}
 
+    if #state.joins > 0 then
+        query[#query + 1] = self:compileJoinClauses(state.joins, params)
+    end
+
     if #state.wheres > 0 then
         query[#query + 1] = 'WHERE ' .. self:compileWhereClause(state.wheres, params)
     end
@@ -140,6 +192,9 @@ function QueryCompilerMySQL:compileCount(state)
 
     if #state.groupBys == 0 then
         local q = { ('SELECT COUNT(*) FROM %s'):format(fromSql) }
+        if #state.joins > 0 then
+            q[#q + 1] = self:compileJoinClauses(state.joins, params)
+        end
         if #state.wheres > 0 then
             q[#q + 1] = 'WHERE ' .. self:compileWhereClause(state.wheres, params)
         end
@@ -147,6 +202,9 @@ function QueryCompilerMySQL:compileCount(state)
     end
 
     local inner = { ('SELECT 1 FROM %s'):format(fromSql) }
+    if #state.joins > 0 then
+        inner[#inner + 1] = self:compileJoinClauses(state.joins, params)
+    end
     if #state.wheres > 0 then
         inner[#inner + 1] = 'WHERE ' .. self:compileWhereClause(state.wheres, params)
     end

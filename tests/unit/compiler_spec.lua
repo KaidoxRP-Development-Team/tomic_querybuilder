@@ -103,6 +103,27 @@ local q1, p1 = DB:table('users', 'u')
 assertEq(q1, 'SELECT `u`.`id`, `u`.`username` FROM `users` AS `u` WHERE `u`.`status` = ? OR `u`.`age` > ?', 'compile select+where')
 assertTableEq(p1, { 'active', 18 }, 'compile select+where bindings')
 
+
+-- join with where
+local qJoin1, pJoin1 = DB:table('users', 'u')
+    :join('characters', 'characters.identifier', '=', 'u.identifier')
+    :where('u.group', 'admin')
+    :buildQuery()
+assertEq(qJoin1, 'SELECT * FROM `users` AS `u` INNER JOIN `characters` ON `characters`.`identifier` = `u`.`identifier` WHERE `u`.`group` = ?', 'compile join with where')
+assertTableEq(pJoin1, { 'admin' }, 'compile join with where bindings')
+
+-- join with multiple ON conditions and ON bindings
+local qJoin2, pJoin2 = DB:table('users', 'u')
+    :leftJoin('characters', function(j)
+        j:on('characters.identifier', '=', 'u.identifier')
+         :onRaw('characters.slot = ?', 2)
+         :orOnRaw('characters.owner = ?', 'char1:abc')
+    end)
+    :where('u.active', 1)
+    :buildQuery()
+assertEq(qJoin2, 'SELECT * FROM `users` AS `u` LEFT JOIN `characters` ON `characters`.`identifier` = `u`.`identifier` AND characters.slot = ? OR characters.owner = ? WHERE `u`.`active` = ?', 'compile join with multiple on conditions')
+assertTableEq(pJoin2, { 2, 'char1:abc', 1 }, 'compile join with multiple on conditions bindings')
+
 -- toSql/getBindings helpers
 local qb2 = DB:table('users'):where('id', 9)
 assertEq(qb2:toSql(), 'SELECT * FROM `users` WHERE `id` = ?', 'toSql returns compiled sql')

@@ -28,9 +28,23 @@ local OxMySQLAdapter = require 'src.classes.OxMySQLAdapter'
 ---@field boolean 'AND'|'OR'
 ---@field group? QueryBuilder
 
+---@class QueryBuilderJoinOn
+---@field boolean 'AND'|'OR'
+---@field _raw? string
+---@field params? table
+---@field left? string
+---@field operator? string
+---@field right? string
+
+---@class QueryBuilderJoin
+---@field _type 'INNER'|'LEFT'
+---@field tableName string
+---@field alias? string
+---@field ons QueryBuilderJoinOn[]
 ---@class QueryBuilder
 ---@field selects QueryBuilderSelect[]
 ---@field from { name: string, alias: string|nil }
+---@field joins QueryBuilderJoin[]
 ---@field wheres QueryBuilderWhere[]
 ---@field groupBys string[]
 ---@field orderBys { column: string, direction: 'ASC'|'DESC' }[]
@@ -85,6 +99,7 @@ function QueryBuilder:constructor(tableName, alias, compiler, adapter)
 
     self.selects = {}
     self.from = { name = tableName, alias = alias }
+    self.joins = {}
     self.wheres = {}
     self.groupBys = {}
     self.orderBys = {}
@@ -139,6 +154,106 @@ function QueryBuilder:selectAs(column, alias)
         _raw = true,
         expr = ('%s AS %s'):format(Utilities.ensureBackticks(column), Utilities.ensureBackticks(alias))
     }
+    return self
+end
+
+local function buildJoin(tableName, first, operator, second)
+    local join = {
+        _type = 'INNER',
+        tableName = tableName,
+        ons = {}
+    }
+
+    if second ~= nil then
+        join.ons[#join.ons + 1] = {
+            left = first,
+            operator = normalizeOperator(operator),
+            right = second,
+            boolean = 'AND'
+        }
+    end
+
+    return join
+end
+
+local function attachJoinOnApi(join)
+    local api = {}
+
+    function api:on(left, operator, right)
+        join.ons[#join.ons + 1] = {
+            left = left,
+            operator = normalizeOperator(operator),
+            right = right,
+            boolean = 'AND'
+        }
+        return api
+    end
+
+    function api:orOn(left, operator, right)
+        join.ons[#join.ons + 1] = {
+            left = left,
+            operator = normalizeOperator(operator),
+            right = right,
+            boolean = 'OR'
+        }
+        return api
+    end
+
+    function api:onRaw(expression, ...)
+        join.ons[#join.ons + 1] = {
+            _raw = expression,
+            params = Input:sanitizeTable({ ... }),
+            boolean = 'AND'
+        }
+        return api
+    end
+
+    function api:orOnRaw(expression, ...)
+        join.ons[#join.ons + 1] = {
+            _raw = expression,
+            params = Input:sanitizeTable({ ... }),
+            boolean = 'OR'
+        }
+        return api
+    end
+
+    return api
+end
+
+---@param tableName string
+---@param first string|fun(j: table)
+---@param operator? string
+---@param second? string
+---@return QueryBuilder
+function QueryBuilder:join(tableName, first, operator, second)
+    local join = buildJoin(tableName, first, operator, second)
+
+    if type(first) == 'function' then
+        first(attachJoinOnApi(join))
+    elseif second == nil then
+        error(('[%s]: join requires either a callback or left/operator/right arguments.'):format(Utilities.CURRENT_RESOURCE_NAME))
+    end
+
+    self.joins[#self.joins + 1] = join
+    return self
+end
+
+---@param tableName string
+---@param first string|fun(j: table)
+---@param operator? string
+---@param second? string
+---@return QueryBuilder
+function QueryBuilder:leftJoin(tableName, first, operator, second)
+    local join = buildJoin(tableName, first, operator, second)
+    join._type = 'LEFT'
+
+    if type(first) == 'function' then
+        first(attachJoinOnApi(join))
+    elseif second == nil then
+        error(('[%s]: leftJoin requires either a callback or left/operator/right arguments.'):format(Utilities.CURRENT_RESOURCE_NAME))
+    end
+
+    self.joins[#self.joins + 1] = join
     return self
 end
 
