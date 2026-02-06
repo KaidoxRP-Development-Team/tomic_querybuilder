@@ -55,6 +55,7 @@ local VALID_OPERATORS <const> = {
 
 local DEFAULT_COMPILER = QueryCompilerMySQL:constructor()
 local DEFAULT_ADAPTER = OxMySQLAdapter:constructor()
+local DEFAULT_CONFIG = { logQueries = false }
 
 ---@param op any
 ---@return string
@@ -92,8 +93,30 @@ function QueryBuilder:constructor(tableName, alias, compiler, adapter)
     self._allowNoWhere = false
     self._compiler = compiler or DEFAULT_COMPILER
     self._adapter = adapter or DEFAULT_ADAPTER
+    self._config = DEFAULT_CONFIG
 
     return self
+end
+
+---Enable/disable query logging globally for all QueryBuilder instances.
+---@param enabled boolean
+---@return QueryBuilder
+function QueryBuilder:setLoggingEnabled(enabled)
+    DEFAULT_CONFIG.logQueries = enabled == true
+    return self
+end
+
+local function encodeBindings(bindings)
+    if not json or type(json.encode) ~= 'function' then
+        return tostring(bindings)
+    end
+
+    return json.encode(bindings)
+end
+
+---@return string, table
+function QueryBuilder:_compileDebugQuery()
+    return self:buildQuery(false)
 end
 
 function QueryBuilder:allowAll() self._allowNoWhere = true return self end
@@ -268,10 +291,33 @@ function QueryBuilder:buildQuery(isCount)
     return self:buildSelectQuery(false)
 end
 
-function QueryBuilder:toSql() return self:buildQuery(false) end
+---Get only the compiled SQL string for the current SELECT query AST.
+---@return string
+function QueryBuilder:toSql()
+    local query = self:_compileDebugQuery()
+    return query
+end
+
+---Get only the compiled bindings array for the current SELECT query AST.
+---@return table
+function QueryBuilder:getBindings()
+    local _, params = self:_compileDebugQuery()
+    return params
+end
+
+---Print SQL + bindings for the current SELECT query AST.
+---@return QueryBuilder
+function QueryBuilder:dump()
+    local query, params = self:_compileDebugQuery()
+    print(('[%s]: SQL: %s | bindings: %s'):format(Utilities.CURRENT_RESOURCE_NAME, query, encodeBindings(params)))
+    return self
+end
 
 function QueryBuilder:get()
     local query, params = self:buildQuery(false)
+    if self._config.logQueries then
+        print(('[%s]: SQL: %s | bindings: %s'):format(Utilities.CURRENT_RESOURCE_NAME, query, encodeBindings(params)))
+    end
     return self._adapter:query(query, params)
 end
 
@@ -280,6 +326,9 @@ function QueryBuilder:first()
     self._limit = 1
     local query, params = self:buildQuery(false)
     self._limit = prev
+    if self._config.logQueries then
+        print(('[%s]: SQL: %s | bindings: %s'):format(Utilities.CURRENT_RESOURCE_NAME, query, encodeBindings(params)))
+    end
     return self._adapter:single(query, params)
 end
 
@@ -291,11 +340,17 @@ function QueryBuilder:value(column)
     local query, params = self:buildQuery(false)
     self._limit = prev
     self.selects = prevSelects
+    if self._config.logQueries then
+        print(('[%s]: SQL: %s | bindings: %s'):format(Utilities.CURRENT_RESOURCE_NAME, query, encodeBindings(params)))
+    end
     return self._adapter:scalar(query, params)
 end
 
 function QueryBuilder:count()
     local query, params = self:buildCountQuery()
+    if self._config.logQueries then
+        print(('[%s]: SQL: %s | bindings: %s'):format(Utilities.CURRENT_RESOURCE_NAME, query, encodeBindings(params)))
+    end
     return self._adapter:scalar(query, params)
 end
 
@@ -311,16 +366,25 @@ end
 
 function QueryBuilder:insert(data)
     local query, params = self:buildInsertQuery(data)
+    if self._config.logQueries then
+        print(('[%s]: SQL: %s | bindings: %s'):format(Utilities.CURRENT_RESOURCE_NAME, query, encodeBindings(params)))
+    end
     return self._adapter:insert(query, params)
 end
 
 function QueryBuilder:update(data)
     local query, params = self:buildUpdateQuery(data)
+    if self._config.logQueries then
+        print(('[%s]: SQL: %s | bindings: %s'):format(Utilities.CURRENT_RESOURCE_NAME, query, encodeBindings(params)))
+    end
     return self._adapter:update(query, params)
 end
 
 function QueryBuilder:delete()
     local query, params = self:buildDeleteQuery()
+    if self._config.logQueries then
+        print(('[%s]: SQL: %s | bindings: %s'):format(Utilities.CURRENT_RESOURCE_NAME, query, encodeBindings(params)))
+    end
     return self._adapter:update(query, params)
 end
 
